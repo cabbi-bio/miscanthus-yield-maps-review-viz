@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miscanthus yield maps — model comparison</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logos">
+      <img src="logo-cabbi.png" alt="Center for Advanced Bioenergy and Bioproducts Innovation">
+      <img src="logo-isu.png" alt="Iowa State University">
+    </div>
+    <div class="brand-text">
+      <h1>Miscanthus yield maps</h1>
+      <p class="sub">Digitized model predictions from the literature &middot; <span id="ds-count"></span> gridded maps</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button id="more-info" class="ghostbtn">More info</button>
+    <button id="all-refs" class="ghostbtn">References</button>
+    <div class="modes" role="tablist" aria-label="View mode">
+      <button class="mode is-active" data-mode="single" role="tab">Single</button>
+      <button class="mode" data-mode="side" role="tab">Side&nbsp;by&nbsp;side</button>
+      <button class="mode" data-mode="diff" role="tab">Difference</button>
+      <button class="mode" data-mode="grid" role="tab">All maps</button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <aside class="sidebar">
+    <section class="panel">
+      <h2>Datasets</h2>
+      <p class="hint" id="pick-hint">Click to show. Shift-click to set the comparison map (B).</p>
+      <ul class="ds-list" id="ds-list"></ul>
+    </section>
+
+    <section class="panel">
+      <h2>Display</h2>
+
+      <label class="field">
+        <span>Projection</span>
+        <select id="proj">
+          <option value="equirectangular">Equirectangular (plate carrée)</option>
+          <option value="naturalEarth1">Natural Earth</option>
+          <option value="mercator">Mercator</option>
+          <option value="albersUsa">Albers USA</option>
+          <option value="conicEqualArea">Albers equal-area conic</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Extent</span>
+        <select id="extent">
+          <option value="auto">Fit to selected map</option>
+          <option value="conus">Conterminous US</option>
+          <option value="midwest">US Midwest</option>
+          <option value="illinois">Illinois</option>
+          <option value="world">World</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Colour ramp</span>
+        <select id="ramp">
+          <option value="brbg">BrBG (brown → blue-green)</option>
+          <option value="turbo">Turbo, inverted</option>
+          <option value="viridis">Viridis (perceptually uniform)</option>
+          <option value="blues">Single-hue blue</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Colour scale</span>
+        <select id="domain">
+          <option value="self">Per-map (min–max)</option>
+          <option value="shared">Shared (0–40 Mg ha⁻¹)</option>
+          <option value="robust">Per-map robust (2–98%)</option>
+        </select>
+      </label>
+
+      <label class="check"><input type="checkbox" id="opt-coast" checked> Coastlines &amp; borders</label>
+      <label class="check"><input type="checkbox" id="opt-grat" checked> Graticule (10°)</label>
+      <label class="check"><input type="checkbox" id="opt-cells"> Cell outlines (when zoomed)</label>
+      <label class="check"><input type="checkbox" id="opt-davis" checked> Convert Davis to Mg ha⁻¹ (&times;0.0222)</label>
+    </section>
+
+    <section class="panel" id="align-panel">
+      <h2>Alignment check</h2>
+      <p class="hint">Overlay the outline of another map's data footprint on top of the current one. If the georeferencing is right, coastlines and state edges should coincide.</p>
+      <label class="field">
+        <span>Overlay footprint</span>
+        <select id="overlay"><option value="">— none —</option></select>
+      </label>
+      <div id="align-stats" class="stats"></div>
+      <p class="hint" style="margin-top:10px">
+        <b>Cells off land</b> is the decisive test: it needs no second study, so
+        it separates georeferencing from scope. A map is registered if its best
+        shift is near (0°,&nbsp;0°) and the gain over 0% is small. Coarse grids
+        legitimately place coastal cell centres offshore, so judge the
+        <em>shift</em>, not the raw percentage.
+        <b>Mask overlap</b> and <b>best shift</b> compare two studies and are
+        confounded by the different areas each one chose to simulate — read them
+        second.
+      </p>
+    </section>
+  </aside>
+
+  <main class="stage">
+    <div id="view-single" class="view">
+      <div class="map-head">
+        <div class="map-head-text">
+          <h3 id="title-A">—</h3>
+          <p id="meta-A" class="meta"></p>
+        </div>
+        <button class="citebtn" data-cite="a">Cite</button>
+      </div>
+      <div class="map-wrap" id="wrap-A"></div>
+    </div>
+
+    <div id="view-side" class="view hidden">
+      <div class="pair">
+        <div class="pane">
+          <div class="map-head">
+            <div class="map-head-text"><h3 id="title-A2">—</h3><p id="meta-A2" class="meta"></p></div>
+            <button class="citebtn" data-cite="a">Cite</button>
+          </div>
+          <div class="map-wrap" id="wrap-A2"></div>
+        </div>
+        <div class="pane">
+          <div class="map-head">
+            <div class="map-head-text"><h3 id="title-B2">—</h3><p id="meta-B2" class="meta"></p></div>
+            <button class="citebtn" data-cite="b">Cite</button>
+          </div>
+          <div class="map-wrap" id="wrap-B2"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-diff" class="view hidden">
+      <div class="map-head">
+        <div class="map-head-text">
+          <h3 id="title-D">—</h3>
+          <p id="meta-D" class="meta"></p>
+        </div>
+        <button class="citebtn" data-cite="ab">Cite both</button>
+      </div>
+      <div class="map-wrap" id="wrap-D"></div>
+    </div>
+
+    <div id="view-grid" class="view hidden">
+      <div class="grid-maps" id="grid-maps"></div>
+    </div>
+
+    <div class="legend-bar">
+      <div id="legend"></div>
+      <div class="zoomhint">scroll to zoom &middot; drag to pan &middot; <button id="reset-zoom" class="linkbtn">reset</button></div>
+    </div>
+  </main>
+</div>
+
+<div id="tooltip" class="tooltip hidden"></div>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head">
+      <h2 id="modal-title">References</h2>
+      <button id="modal-close" class="modal-x" aria-label="Close">&times;</button>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+  </div>
+</div>
+
+<footer class="foot">
+  <div id="notes"></div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script src="yield_data.js"></script>
+<script src="citations.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
