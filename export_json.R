@@ -85,7 +85,8 @@ for (a in seq_along(out)) for (b in seq_along(out)) {
 }
 
 js <- toJSON(unname(out), auto_unbox = TRUE, digits = 6, na = "null")
-writeLines(paste0("window.YIELD_DATA = ", js, ";"), "../viz/yield_data.js")
+writeLines(paste0("window.YIELD_DATA = ", js, ";"),
+           "../miscanthus-yield-maps-viz-demo/yield_data.js")
 cat("wrote ", length(out), " datasets (",
     sum(vapply(out, function(z) z$n_valid > 0 && is.na(z$dup_of), TRUE)),
     " usable)\n", sep = "")

@@ -27,6 +27,7 @@
       <button class="mode" data-mode="side" role="tab">Side&nbsp;by&nbsp;side</button>
       <button class="mode" data-mode="diff" role="tab">Difference</button>
       <button class="mode" data-mode="grid" role="tab">All maps</button>
+      <button class="mode" data-mode="ens" role="tab">Ensemble</button>
     </div>
   </div>
 </header>
@@ -88,6 +89,49 @@
       <label class="check"><input type="checkbox" id="opt-grat" checked> Graticule (10°)</label>
       <label class="check"><input type="checkbox" id="opt-cells"> Cell outlines (when zoomed)</label>
       <label class="check"><input type="checkbox" id="opt-davis" checked> Convert Davis to Mg ha⁻¹ (&times;0.0222)</label>
+    </section>
+
+    <section class="panel hidden" id="ens-panel">
+      <h2>Ensemble</h2>
+      <p class="hint">Every map is collapsed to one value per 1° cell, then the
+        statistics are taken <em>across maps</em> — one map, one vote,
+        regardless of its native resolution.</p>
+
+      <label class="field">
+        <span>Layer</span>
+        <select id="ens-layer">
+          <option value="median">Median yield</option>
+          <option value="mean">Mean yield</option>
+          <option value="sd">Standard deviation</option>
+          <option value="cv">Coefficient of variation</option>
+          <option value="range">Range (max − min)</option>
+          <option value="n">Contributing maps (n)</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Minimum contributing maps</span>
+        <select id="ens-minn">
+          <option value="1">1 — show everything</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4 or more</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Minimum cell coverage</span>
+        <select id="ens-mincov">
+          <option value="0">any overlap</option>
+          <option value="0.1">10%</option>
+          <option value="0.25">25%</option>
+          <option value="0.5">50%</option>
+        </select>
+      </label>
+
+      <h2 style="margin-top:14px">Maps included</h2>
+      <div id="ens-include"></div>
+      <div id="ens-note" class="stats" style="margin-top:10px"></div>
     </section>
 
     <section class="panel" id="align-panel">
@@ -157,6 +201,17 @@
       <div class="grid-maps" id="grid-maps"></div>
     </div>
 
+    <div id="view-ens" class="view hidden">
+      <div class="map-head">
+        <div class="map-head-text">
+          <h3 id="title-E">—</h3>
+          <p id="meta-E" class="meta"></p>
+        </div>
+        <button id="ens-csv" class="citebtn">Export CSV</button>
+      </div>
+      <div class="map-wrap" id="wrap-E"></div>
+    </div>
+
     <div class="legend-bar">
       <div id="legend"></div>
       <div class="zoomhint">scroll to zoom &middot; drag to pan &middot; <button id="reset-zoom" class="linkbtn">reset</button></div>
@@ -184,6 +239,7 @@
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <script src="yield_data.js"></script>
 <script src="citations.js"></script>
+<script src="ensemble.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

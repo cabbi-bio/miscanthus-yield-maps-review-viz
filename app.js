@@ -45,7 +45,17 @@ var state = {
   cells: false,
   davis: true,
   overlay: '',
-  transform: d3.zoomIdentity
+  transform: d3.zoomIdentity,
+  ens: {
+    // median, not mean: the mean is pulled well above it wherever Davis
+    // contributes, since Davis reports aboveground production on an
+    // open-topped class scheme (README § Davis dominates the ensemble mean)
+    layer: 'median',
+    minN: 2,          // at n>=2 every cell has a contributor at 0.5° or finer
+    minCov: 0.25,
+    dlon: 1, dlat: 1,
+    include: {}       // key -> bool, filled in at boot
+  }
 };
 
 var world = { land: null, states: null, failed: false };
@@ -510,6 +520,32 @@ function onHover(p, ev) {
   rows.push(['lon, lat', lon.toFixed(2) + '°, ' + lat.toFixed(2) + '°']);
 
   var title;
+  if (p.layer.kind === 'ens') {
+    var hit = Ensemble.at(p.layer.ens, lon, lat);
+    if (!hit) return hideTip();
+    var s = hit.stats;
+    var floor = Math.max(p.layer.spec.minN, state.ens.minN);
+    title = s.n + (s.n === 1 ? ' map' : ' maps') + ' here';
+    rows = [['lon, lat', hit.lon.toFixed(1) + '°, ' + hit.lat.toFixed(1) + '°']];
+    if (s.n < floor) {
+      rows.push(['', 'below the n ≥ ' + floor + ' filter']);
+    } else {
+      rows.push(['mean', fmt(s.mean) + ' Mg ha⁻¹']);
+      rows.push(['median', fmt(s.median) + ' Mg ha⁻¹']);
+      rows.push(['sd', s.sd === null ? 'n/a (n = 1)' : fmt(s.sd)]);
+      rows.push(['range', s.range === null ? 'n/a (n = 1)'
+        : fmt(s.range) + '  (' + fmt(s.min) + ' – ' + fmt(s.max) + ')']);
+    }
+    // the list of contributing maps is the point of the layer
+    hit.cell.members.forEach(function (mk, i) {
+      var d = byKey(mk);
+      rows.push([(d && d.short) || mk,
+        fmt(hit.cell.values[i]) + '  (' +
+        Math.round(hit.cell.cover[i] * 100) + '%)']);
+    });
+    showTip(title, rows, ev);
+    return;
+  }
   if (p.layer.kind === 'diff') {
     var st = p.layer.stats;
     var va = sampleDisplay(st.A, lon, lat), vb = sampleDisplay(st.B, lon, lat);
@@ -529,7 +565,12 @@ function onHover(p, ev) {
     }
   }
 
-  tip.innerHTML = '<div class="tt-t"></div>' + rows.map(function (rw) {
+  showTip(title, rows, ev);
+}
+
+/** Render and position the tooltip. rows is [[label, value], ...]. */
+function showTip(title, rows, ev) {
+  tip.innerHTML = '<div class="tt-t"></div>' + rows.map(function () {
     return '<div class="tt-r"><span></span><b></b></div>';
   }).join('');
   tip.querySelector('.tt-t').textContent = title;
@@ -609,10 +650,14 @@ function renderAll() {
   document.querySelectorAll('.mode').forEach(function (b) {
     b.classList.toggle('is-active', b.dataset.mode === state.mode);
   });
-  ['single', 'side', 'diff', 'grid'].forEach(function (m) {
+  ['single', 'side', 'diff', 'grid', 'ens'].forEach(function (m) {
     document.getElementById('view-' + m).classList.toggle('hidden',
       state.mode !== m);
   });
+  document.getElementById('ens-panel').classList.toggle('hidden',
+    state.mode !== 'ens');
+  document.getElementById('align-panel').classList.toggle('hidden',
+    state.mode === 'ens');
 
   if (state.mode === 'single' && A) {
     var la = layerFor(A);
@@ -642,6 +687,16 @@ function renderAll() {
   } else if (state.mode === 'grid') {
     drawLegend([renderGrid()]);
     alignStats(A, B);
+
+  } else if (state.mode === 'ens') {
+    var el = ensembleLayer();
+    document.getElementById('title-E').textContent =
+      el ? el.label + ' across the ensemble' : 'No maps selected';
+    document.getElementById('meta-E').textContent = ensMeta(el);
+    drawPane(pane('wrap-E'), el, el && el.ds);
+    drawLegend(el ? [el] : []);
+    ensNote(el);
+    document.getElementById('ens-csv').disabled = !el;
   }
 }
 
@@ -726,6 +781,153 @@ function renderGrid() {
   state.transform = savedT;
   state.domain = savedD;
   return legend;
+}
+
+// ---------------------------------------------------------------- ensemble
+
+var ensCache = { key: null, ens: null };
+
+function ensIncluded() {
+  return WITH_DATA.filter(function (d) { return state.ens.include[d.key]; });
+}
+
+/** Rebuild the aggregation only when the inputs to it actually change. */
+function ensGrid() {
+  var members = ensIncluded();
+  var ck = members.map(function (d) { return d.key; }).join(',') + '|' +
+           state.ens.minCov + '|' + state.ens.dlon + 'x' + state.ens.dlat + '|' +
+           (state.davis ? 1 : 0);
+  if (ensCache.key === ck) return ensCache.ens;
+
+  var input = members.map(function (d) {
+    return {
+      key: d.key, lon0: d.lon0, dlon: d.dlon, nlon: d.nlon,
+      lat0: d.lat0, dlat: d.dlat, nlat: d.nlat,
+      idx: d.idx, val: d.val, factor: unitFactor(d)
+    };
+  });
+  var ens = Ensemble.accumulate(input, {
+    dlon: state.ens.dlon, dlat: state.ens.dlat, minCoverage: state.ens.minCov
+  });
+  ensCache = { key: ck, ens: ens };
+  return ens;
+}
+
+function ensembleLayer() {
+  if (!ensIncluded().length) return null;
+  var ens = ensGrid();
+  var which = state.ens.layer;
+  var spec = Ensemble.LAYERS[which];
+  var grid = Ensemble.layerGrid(ens, which, state.ens.minN);
+
+  var vals = [];
+  for (var i = 0; i < grid.length; i++) if (!isNaN(grid[i])) vals.push(grid[i]);
+  if (!vals.length) return null;
+  var sorted = Float64Array.from(vals).sort();
+  var lo = sorted[0], hi = sorted[sorted.length - 1];
+
+  var pseudo = {
+    key: '__ens', lon0: -180 + ens.dlon / 2, dlon: ens.dlon, nlon: ens.nlon,
+    lat0: -90 + ens.dlat / 2, dlat: ens.dlat, nlat: ens.nlat, grid: grid,
+    bbox: [-180, -90, 180, 90]
+  };
+
+  // Yields reuse the map ramp so they read against the single maps; spread
+  // statistics get their own ramp because they are disagreement, not yield.
+  var color;
+  if (spec.kind === 'yield') {
+    var dom = state.domain === 'shared' ? [0, 40]
+            : [sorted[Math.floor(0.02 * (sorted.length - 1))],
+               sorted[Math.floor(0.98 * (sorted.length - 1))]];
+    var sy = d3.scaleLinear().domain(dom).range([0, 1]).clamp(true);
+    color = function (v) { return seqRamp(sy(v)); };
+    color.domain = dom;
+  } else {
+    var top = spec.kind === 'count' ? hi
+            : sorted[Math.floor(0.98 * (sorted.length - 1))] || hi;
+    var ss = d3.scaleLinear().domain([spec.kind === 'count' ? 1 : 0, top])
+      .range([0, 1]).clamp(true);
+    color = function (v) { return d3.interpolatePlasma(0.08 + 0.84 * ss(v)); };
+    color.domain = [spec.kind === 'count' ? 1 : 0, top];
+    color.spread = true;
+  }
+  color.diverging = false;
+
+  return {
+    kind: 'ens', ds: pseudo, color: color, factor: 1,
+    label: spec.label, units: spec.unit, ens: ens, spec: spec, which: which,
+    nCells: vals.length
+  };
+}
+
+function ensMeta(layer) {
+  if (!layer) return 'No maps selected.';
+  var inc = ensIncluded().length;
+  var floor = Math.max(layer.spec.minN, state.ens.minN);
+  return inc + ' of ' + WITH_DATA.length + ' maps · 1° grid · ' +
+    layer.nCells.toLocaleString() + ' cells shown · n ≥ ' + floor +
+    ' · coverage ≥ ' + Math.round(state.ens.minCov * 100) + '%';
+}
+
+function buildEnsPanel() {
+  var host = document.getElementById('ens-include');
+  if (host.dataset.built) return;
+  WITH_DATA.forEach(function (d) {
+    var lab = document.createElement('label');
+    lab.className = 'check';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!state.ens.include[d.key];
+    cb.addEventListener('change', function () {
+      state.ens.include[d.key] = cb.checked;
+      renderAll();
+    });
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(d.short));
+    host.appendChild(lab);
+  });
+  host.dataset.built = '1';
+}
+
+/** The caveats that change how these numbers should be read. */
+function ensNote(layer) {
+  var el = document.getElementById('ens-note');
+  if (!layer) { el.textContent = ''; return; }
+  var bits = [];
+  if (state.ens.minN < 2) {
+    bits.push('At n = 1 the standard deviation, CV and range are undefined and ' +
+      'those layers stay blank; the mean and median are simply that one map’s value.');
+  }
+  bits.push('Only four maps are global, so outside the conterminous US n cannot ' +
+    'exceed 4. Low n there is sparse sampling, not close agreement.');
+  bits.push('Simulation periods span 1961–2020, so part of the spread is climate ' +
+    'difference rather than model disagreement.');
+  el.innerHTML = '';
+  bits.forEach(function (b) {
+    var p = document.createElement('p');
+    p.style.margin = '0 0 6px';
+    p.textContent = b;
+    el.appendChild(p);
+  });
+}
+
+function exportEnsCSV() {
+  var layer = ensembleLayer();
+  if (!layer) return;
+  var floor = Math.max(layer.spec.minN, state.ens.minN);
+  var csv = Ensemble.toCSV(layer.ens, floor, function (k) {
+    var d = byKey(k);
+    return (d && d.study) || k;
+  });
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'miscanthus_ensemble_1deg_n' + floor + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
 }
 
 // ---------------------------------------------------------------- alignment
@@ -1313,6 +1515,11 @@ function syncControls() {
     var el = document.getElementById(p[0]);
     if (el) el.checked = state[p[1]];
   });
+  [['ens-layer', 'layer'], ['ens-minn', 'minN'],
+   ['ens-mincov', 'minCov']].forEach(function (p) {
+    var el = document.getElementById(p[0]);
+    if (el) el.value = state.ens[p[1]];
+  });
 }
 
 function bind() {
@@ -1363,6 +1570,20 @@ function bind() {
   });
 
   document.getElementById('more-info').addEventListener('click', openAbout);
+
+  document.getElementById('ens-layer').addEventListener('change', function (e) {
+    state.ens.layer = e.target.value;
+    renderAll();
+  });
+  document.getElementById('ens-minn').addEventListener('change', function (e) {
+    state.ens.minN = +e.target.value;
+    renderAll();
+  });
+  document.getElementById('ens-mincov').addEventListener('change', function (e) {
+    state.ens.minCov = +e.target.value;
+    renderAll();
+  });
+  document.getElementById('ens-csv').addEventListener('click', exportEnsCSV);
 
   document.getElementById('modal-close').addEventListener('click', closeRefs);
   document.getElementById('modal').addEventListener('click', function (ev) {
@@ -1423,7 +1644,9 @@ function init() {
     document.getElementById('notes').textContent = 'No data loaded.';
     return;
   }
+  WITH_DATA.forEach(function (d) { state.ens.include[d.key] = true; });
   buildList();
+  buildEnsPanel();
   buildNotes();
   bind();
   syncControls();

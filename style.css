@@ -220,6 +220,18 @@ body {
   color: var(--text-muted);
 }
 
+.panel.hidden { display: none; }
+
+#ens-include .check { margin-top: 4px; }
+
+#ens-note p {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.citebtn:disabled { opacity: .45; cursor: default; }
+
 .hint {
   margin: 0 0 10px;
   font-size: 11.5px;

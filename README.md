@@ -46,6 +46,7 @@ Each dataset is stored sparsely — `idx[k] = i + j*nlon` with
 | **Side by side** | Two maps on one shared extent and one shared zoom. |
 | **Difference** | A − B on the coarser of the two grids, diverging scale centred on zero. |
 | **All maps** | Every loaded map as small multiples on a single common colour scale. |
+| **Ensemble** | All maps aggregated onto one 1° grid: mean, median, sd, CV, range, and the count of contributing maps. |
 
 **Cite** in the map header opens that study's full reference; **References** in
 the top bar opens all of them, labelled the same way the sidebar labels them.
@@ -88,6 +89,69 @@ Two details worth confirming before this goes anywhere public:
 
 Zoom is applied as an affine transform on the projected plane, so the raster
 cells and the vector coastlines can never drift apart under pan or zoom.
+
+## The ensemble layer
+
+Implemented in `ensemble.js`, which is independent of the rendering code and can
+be run on its own. Design rationale, coverage measurements and the caveats are
+in `ENSEMBLE.md`.
+
+**Statistics are taken across maps, not across cells.** Each map is first
+collapsed to a single area-weighted value per 1° cell, then n, mean, median, sd,
+CV and range are computed over those per-map values — one map, one vote. Pooling
+raw cells instead would weight the result by resolution: a 0.25° map drops ~16
+values into a 1° cell against a 0.5° map's ~4.
+
+Two details that are easy to get wrong and are load-bearing here:
+
+- Overlap is computed from **cell extents, not cell centres**. A Littleton cell
+  (1.875° × 1.25°) has one centre but covers ~2.3 one-degree cells, so centre
+  binning would drop it from most of the area it actually covers.
+- Areas are **spherical** (∝ Δlon · |sin lat₂ − sin lat₁|). The grids reach 83°N,
+  where a planar approximation is off eightfold.
+
+Controls: layer (default **median** — see the Davis note below), minimum
+contributing maps (default **2**), minimum cell coverage (default **25%**), and
+a per-map include list. **Export CSV** writes one
+row per cell — lon, lat, n, every statistic, and the member list.
+
+Hovering a cell lists every contributing map with its value and what fraction of
+the cell it covers.
+
+### Why the minimum-n default is 2
+
+48% of 1° cells have exactly one contributing map. There, sd and range are
+undefined, and drawing range as zero would render an unopposed model as perfect
+agreement — the opposite of the truth. Those layers mask n = 1 regardless of the
+filter setting.
+
+The default also keeps the 1° grid honest. Littleton is the only input coarser
+than 1°, so at n ≥ 2 every displayed cell has a contributor at 0.5° or finer.
+
+### Davis dominates the ensemble mean — read the median alongside it
+
+Converted to Mg ha⁻¹, `davis_2012` has a **median of 50.0** against 2.3–29.9 for
+every other map, and a maximum of 61.1. In an Illinois cell it contributes 56
+against a 10-map median of 18, pulling the mean 4.5 Mg ha⁻¹ above the median.
+
+This is not a conversion error. Figure 2a really is in g C m⁻² yr⁻¹, its legend
+classes are `<100, 100–200, 200–300, 300–600, 600–1000, 1000–1500, 1500–2000,
+2000–2500, >2500`, and the digitized midpoints match them exactly. Two real
+reasons for the gap:
+
+- **Davis reports a different quantity.** Figure 2a is modelled potential
+  *aboveground production*, not harvested yield. The other maps report
+  harvested or harvestable yield, taken after senescence at well below peak
+  standing biomass.
+- **Its top class is open-ended.** `>2500` is represented by 2750, and a large
+  share of the corn belt falls in it, so the true values there are unbounded.
+
+**The default layer is therefore median, not mean.** With n rarely above 4
+outside the US, a single outlier moves the mean a long way, and the median is
+the more robust summary of what the models agree on. The mean stays one click
+away; the gap between the two is itself informative, since it localises where a
+single map is doing the work. Use the include list to check sensitivity by
+switching Davis off.
 
 ## Colour
 
