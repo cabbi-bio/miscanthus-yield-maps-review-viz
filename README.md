@@ -4,20 +4,17 @@ A vanilla JavaScript + D3 v7 viewer for the digitized miscanthus yield maps in
 `../data/*/extracted_yield.nc`.
 
 Ten maps load. `miguez_2012/extracted_yield.nc` has been removed pending
-re-extraction, so that folder is skipped; `shepherd_2020` loads but its values
-look contaminated — see [Data quality](#data-quality).
+re-extraction, so that folder is skipped.
 
-`index.html` is the current page. `index_v1.html` is a kept snapshot of the
-version before citations were added; it shares `style.css`, `app.js` and
-`yield_data.js`, so it tracks changes to those and is not a frozen copy.
+Open items are collected under [To do](#to-do).
 
 ## Running it
 
 ```bash
-cd /Users/jesspb/DATA/csm_yield_predictions/viz && python3 -m http.server 8731
+cd /Users/jesspb/DATA/csm_yield_predictions/miscanthus-yield-maps-viz-demo && python3 -m http.server 8742
 ```
 
-Then open <http://localhost:8731>. Opening `index.html` directly off the disk
+Then open <http://localhost:8742>. Opening `index.html` directly off the disk
 also works in Chrome, but a local server is the reliable path.
 
 D3, TopoJSON, and the coastline/state outlines load from jsDelivr, so the page
@@ -30,7 +27,7 @@ only the coastlines drop out, and the page says so.
 `ncdf4` and `jsonlite`:
 
 ```bash
-Rscript /Users/jesspb/DATA/csm_yield_predictions/viz/export_json.R
+Rscript /Users/jesspb/DATA/csm_yield_predictions/miscanthus-yield-maps-viz-demo/export_json.R
 ```
 
 Each dataset is stored sparsely — `idx[k] = i + j*nlon` with
@@ -243,10 +240,15 @@ while that folder has no NetCDF.
 
 ## Data quality
 
-### shepherd_2020 — values look contaminated
+### shepherd_2020 — open question
 
-The file now has 14,415 cells, but several independent signs say the digitization
-picked up the figure's line overlays rather than only its filled cells:
+Reviewed and judged usable, and it is included in the ensemble by default. The
+measurements below are left on record because they were not explained, and they
+are reproducible from the loaded data. Resolve one way or the other before
+publication — see [To do](#to-do).
+
+The file has 14,415 cells, but several independent signs suggest the
+digitization picked up the figure's line overlays as well as its filled cells:
 
 | Check | shepherd_2020 | for comparison |
 |---|---|---|
@@ -346,3 +348,58 @@ the value distributions are discrete — visible as banding at high zoom. The
 per-file `comment` attribute in each NetCDF records exactly how that map was
 digitized and what its known artefacts are; it is worth reading before drawing
 conclusions from any one map.
+
+---
+
+## To do
+
+Everything left open, as of archiving. Nothing here blocks the viewer from
+running; all of it matters before the work is published.
+
+### Blocks publication
+
+- **Replace the project citation.** `ABOUT.citation` in `app.js` is still
+  `<Placeholder Citation for Miscanthus Yield Modeling>`. It renders as a dashed
+  amber chip in the More info modal so it cannot ship unnoticed. Replacing the
+  string is the only edit needed.
+
+- **Resolve `shepherd_2020`.** It was reviewed and judged usable, and is
+  included in the ensemble by default, but the measurements in
+  [Data quality](#data-quality) are unexplained: 18.3% of its cells fall off
+  land, its value distribution is nearly uniform across the colourbar
+  (CV 0.23 against 0.76–1.65 for every other map), and ~41 cells sit in the
+  Southern Ocean below −56°S. Either account for those or re-extract Fig. 13c
+  with the river, city and graticule overlays masked. It is global, so whatever
+  it contributes reaches most non-US ensemble cells.
+
+- **Decide how `davis_2012` enters the ensemble.** Its conversion is correct and
+  its class midpoints match the paper, but it measures *aboveground production*
+  rather than harvested yield, and its top class is open-ended (`>2500`
+  represented by 2750). Converted, its median is 50 Mg ha⁻¹ against 2.3–29.9 for
+  every other map, and it drives most of the apparent model disagreement across
+  the corn belt — in one Iowa cell it lifts the sd from 5.5 to 13.3. Options:
+  leave it and rely on the median layer, apply a harvest-index adjustment, or
+  exclude it from the ensemble by default.
+
+### Data still outstanding
+
+- **Re-extract `miguez_2012`.** Its `extracted_yield.nc` was deleted. Rebuild it
+  and re-run `export_json.R`; the map returns on its own.
+
+- **Check `song_2012`'s registration.** It is the only map whose off-land
+  fraction falls to zero under a shift, of roughly half a cell west and one cell
+  north. Sub-cell and not disqualifying, but worth checking against Fig. 3a.
+
+### Housekeeping
+
+- **Move `ENSEMBLE.md` into this repository.** It is currently in the sibling
+  `../viz/` directory, which is a separate git repository, so the design
+  rationale is versioned apart from the code it describes.
+
+- **Decide whether the About modal should carry office and phone.** Both are on
+  record — 3015 Agronomy, 716 Farm House Ln and (515) 294-8398 — and
+  deliberately omitted; only the email and faculty page are shown.
+
+- **Confirm the CABBI acknowledgement.** Rendered as *Center for Advanced
+  Bioenergy and Bioproducts Innovation*, matching the logo artwork. No award
+  number is asserted; if one is required, add it to `ABOUT.funder`.
